@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-DEVICE=flame
-MANUFACTURER=t2m
+DEVICE=6015x
+MANUFACTURER=alcatel
 
 if [[ -z "${ANDROIDFS_DIR}" ]]; then
     ANDROIDFS_DIR=../../../backup-${DEVICE}
@@ -30,12 +30,18 @@ if [[ ! -d ../../../backup-${DEVICE}/system ]]; then
     adb pull /system ../../../backup-${DEVICE}/system
 fi
 
-if [[ -z "${ANDROIDFS_DIR}" ]]; then
-    echo Pulling files from device
-    DEVICE_BUILD_ID=`adb shell cat /system/build.prop | grep ro.build.display.id | sed -e 's/ro.build.display.id=//' | tr -d '\n\r'`
-else
-    echo Pulling files from ${ANDROIDFS_DIR}
-    DEVICE_BUILD_ID=`cat ${ANDROIDFS_DIR}/system/build.prop | grep ro.build.display.id | sed -e 's/ro.build.display.id=//' | tr -d '\n\r'`
+echo Pulling files from ${ANDROIDFS_DIR}
+DEVICE_BUILD_ID=`cat ${ANDROIDFS_DIR}/system/build.prop | grep ro.build.display.id | sed -e 's/ro.build.display.id=//' | tr -d '\n\r'`
+DEVICE_BUILD_VERSION_SDK=`cat ${ANDROIDFS_DIR}/system/build.prop | grep ro.build.version.sdk | sed -e 's/ro.build.version.sdk=//' | tr -d '\n\r'`
+
+if [[ "$DEVICE_BUILD_VERSION_SDK" -ne 19 ]]; then
+    echo Invalid system backup - Wrong base version found.
+    echo
+    echo Do this:
+    echo 1. Delete backup-${DEVICE}
+    echo 2. Flash your device with KK based images from the vendor
+    echo 3. Try building again
+    exit -1
 fi
 
 BASE_PROPRIETARY_DEVICE_DIR=vendor/$MANUFACTURER/$DEVICE/proprietary
@@ -43,7 +49,7 @@ PROPRIETARY_DEVICE_DIR=../../../vendor/$MANUFACTURER/$DEVICE/proprietary
 
 mkdir -p $PROPRIETARY_DEVICE_DIR
 
-for NAME in audio hw etc egl etc/firmware nfc
+for NAME in audio etc etc/acdbdata/MTP etc/acdbdata/QRD etc/firmware egl hw
 do
     mkdir -p $PROPRIETARY_DEVICE_DIR/$NAME
 done
@@ -143,7 +149,6 @@ copy_local_files()
 }
 
 COMMON_LIBS="
-	libalsa-intf.so
 	libcnefeatureconfig.so
 	libgps.utils.so
 	libloc_api_v02.so
@@ -163,18 +168,31 @@ copy_files_glob "lib*.so" "system/vendor/lib" ""
 COMMON_BINS="
 	adsprpcd
 	bridgemgrd
+	charger_monitor
 	fm_qsoc_patches
 	fmconfig
 	hci_qcomm_init
+	location-mq
+	lowi-server
 	mm-qcamera-daemon
+	mpdecision
 	netmgrd
 	port-bridge
+	ptt_socket_app
+	qcom-system-daemon
 	qmiproxy
 	qmuxd
+	qrngd
+	qseecomd
 	radish
+	rfs_access
 	rmt_storage
+	thermal-engine
 	time_daemon
 	trace_util
+	vold
+	xtwifi-client
+	xtwifi-inet-agent
 	"
 
 copy_files "$COMMON_BINS" "system/bin" ""
@@ -185,20 +203,39 @@ COMMON_HW="
 	camera.msm8610.so
 	gps.default.so
 	lights.msm8610.so
-	nfc_nci_pn547.msm8610.so
 	sensors.msm8610.so
 	"
 copy_files "$COMMON_HW" "system/lib/hw" "hw"
 
 COMMON_ETC="
 	gps.conf
+	lowi.conf
+	mixer_paths.xml
+	xtwifi.conf
 	"
 copy_files "$COMMON_ETC" "system/etc" "etc"
 
-COMMON_ETC_AUDIO="
-	snd_soc_msm_8x10_wcd_skuaa
+COMMON_ETC_ACDBDATA_MTP="
+	MTP_Bluetooth_cal.acdb
+	MTP_General_cal.acdb
+	MTP_Global_cal.acdb
+	MTP_Handset_cal.acdb
+	MTP_Hdmi_cal.acdb
+	MTP_Headset_cal.acdb
+	MTP_Speaker_cal.acdb
 	"
-copy_files "$COMMON_ETC_AUDIO" "system/etc/snd_soc_msm" "audio"
+copy_files "$COMMON_ETC_ACDBDATA_MTP" "system/etc/acdbdata/MTP" "etc/acdbdata/MTP"
+
+COMMON_ETC_ACDBDATA_QRD="
+	QRD_Bluetooth_cal.acdb
+	QRD_General_cal.acdb
+	QRD_Global_cal.acdb
+	QRD_Handset_cal.acdb
+	QRD_Hdmi_cal.acdb
+	QRD_Headset_cal.acdb
+	QRD_Speaker_cal.acdb
+	"
+copy_files "$COMMON_ETC_ACDBDATA_QRD" "system/etc/acdbdata/QRD" "etc/acdbdata/QRD"
 
 COMMON_AUDIO="
 	"
@@ -210,11 +247,6 @@ COMMON_EGL="
 	"
 copy_files "$COMMON_EGL" "system/lib/egl" "egl"
 
-COMMON_VENDOR_NFC="
-	libpn547_fw.so
-	"
-copy_files "$COMMON_VENDOR_NFC" "system/vendor/firmware" "nfc"
-
 COMMON_VENDOR_EGL="
 	eglsubAndroid.so
 	libEGL_adreno.so
@@ -223,6 +255,12 @@ COMMON_VENDOR_EGL="
 	libq3dtools_adreno.so
 	"
 copy_files "$COMMON_VENDOR_EGL" "system/vendor/lib/egl" "egl"
+
+COMMON_VENDOR_HW="
+	flp.default.so
+        "
+copy_files "$COMMON_VENDOR_HW" "system/vendor/lib/hw" "hw"
+
 
 COMMON_FIRMWARE="
 	a225_pfp.fw
